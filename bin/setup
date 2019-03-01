@@ -1,8 +1,155 @@
-#!/usr/bin/env bash
-set -euo pipefail
-IFS=$'\n\t'
-set -vx
+#!/usr/bin/env sh
 
-bundle install
+source "./bin/functions"
 
-# Do any other automated setup that you need to do here
+RUBY_VERSION=$(cat .ruby-version)
+TRELLO_API_KEY_URL="https://trello.com/app-key"
+
+main() {
+  install_ruby
+  install_ruby_deps
+  config_env_if_needed
+  the_end
+}
+
+install_ruby() {
+  pp_info "setup" "Installing ruby..."
+
+  if is_installed "asdf"; then
+    install_with_asdf
+  else
+    install_with_ruby_version_managers
+  fi
+}
+
+install_ruby_deps() {
+  pp_info "setup" "Installing bundler"
+  gem install bundler --conservative
+
+  pp_info "setup" "Installing dependencies with bundler"
+  bundle check || bundle install
+}
+
+config_env_if_needed() {
+  pp_info "setup" "Starting local env setup..."
+  if [ -f .envrc ]; then
+    echo "Already exists, skipping..."
+  else
+    echo "No env found, creating..."
+    config_env
+  fi
+}
+
+the_end() {
+  pp_success "setup" "You're good to go!"
+}
+
+install_with_asdf() {
+  set +e
+  asdf plugin-add ruby https://github.com/asdf-vm/asdf-ruby.git 2>/dev/null
+  set -e
+
+  asdf install ruby $RUBY_VERSION
+  echo "All done!"
+}
+
+install_with_ruby_version_managers() {
+  if is_installed "rvm"; then
+    rvm install
+    echo "Done!"
+  elif is_installed "rbenv"; then
+    rbenv install
+    echo "Done!"
+  else
+    pp_error "setup" "
+      No ruby version management system found. We cannot ensure you are using
+      the correct ruby version. Please install $RUBY_VERSION and run this script again,
+      or proceed at your own peril.
+    "
+
+    ensure_confirmation
+  fi
+}
+
+config_env() {
+  start_env_setup
+  ensure_trello_account
+  setup_trello_env
+  end_env_setup
+}
+
+start_env_setup() {
+  if [ -f .envrc.tmp ]; then
+    echo "Cleaning up cancelled setups..."
+    rm .envrc.tmp
+  fi
+
+  cp .envrc.sample .envrc.tmp
+  pp_info "env" "Created sample .envrc file, let's go through its config"
+}
+
+ensure_trello_account() {
+  pp_info "env" "You will need a Trello account before you can run the interpreter.
+  Stop the install now and create an account if you haven't
+  "
+
+  ensure_confirmation
+}
+
+setup_trello_env() {
+  pp_info "env" "Your Trello app should be set up.
+  We're going to need to collect some values from you.
+  Grab the Trello API Key from here: $TRELLO_API_KEY_URL
+  "
+
+  read_and_set_env "Trello API KEY:" "TRELLO_API_KEY"
+
+  pp_info "env" "We still need your member token.
+  Grab it from here: $(trello_member_token_url)
+  "
+
+  read_and_set_env "Trello Member Token: " "TRELLO_MEMBER_TOKEN"
+
+  echo ""
+}
+
+end_env_setup() {
+  pp_info "env" "Wrapping up the env install"
+  mv .envrc.tmp .envrc
+  rm .envrc.*
+
+  echo "Done! Your environment is now set up"
+}
+
+trello_member_token_url() {
+  echo "https://trello.com/1/authorize?expiration=never&key=$TRELLO_API_KEY&name=Ruby%20Trello&response_type=token&scope=read%2Cwrite%2Caccount"
+}
+
+set_env_file_value() {
+  sed -i -e "s~$1=.*~$1=$2~g" .envrc.tmp
+}
+
+read_and_set_env() {
+  value=$(read_value "$1" "")
+
+  if [ "$value" == "" ]; then
+    echo "We need a value from you. Let's try again."
+    read_and_set_env "$1" "$2"
+  else
+    eval "$2="$value
+    set_env_file_value "$2" "$value"
+  fi
+}
+
+read_and_set_secret() {
+  value=$(read_secret "$1" "")
+
+  if [ "$value" == "" ]; then
+    echo "We need a value from you. Let's try again."
+    read_and_set_secret "$1" "$2"
+  else
+    set_env_file_value "$2" "$value"
+  fi
+}
+
+main

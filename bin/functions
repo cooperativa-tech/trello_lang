@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+
+BLUE='\033[1;34m'
+GREEN='\033[1;32m'
+RED='\033[1;91m'
+RESET='\033[0m'
+
+pp() {
+  echo "\n$1[$2]: $3${RESET}"
+}
+
+pp_info() {
+  pp $BLUE "$1" "$2"
+}
+
+pp_success() {
+  pp $GREEN "$1" "$2"
+}
+
+pp_error() {
+  pp $RED "$1" "$2"
+}
+
+is_installed() {
+  [ -x "$(command -v "$@")" ]
+}
+
+ensure_confirmation() {
+  read -p "Please confirm you want to continue [y/n] (default: y) " confirmation
+  confirmation=${confirmation:-"y"}
+
+  if [ "$confirmation" != "y" ]; then
+    echo "Stopping the install. bye-bye!"
+    exit 1
+  fi
+}
+
+read_value() {
+  read -p "$1 " value
+  ret=${value:-$2}
+
+  echo $ret | sed "s/\n//g"
+}
+
+read_secret() {
+  read -s -p "$1 " value
+  ret=${value:-$2}
+
+  echo $ret | sed "s/\n//g"
+}
