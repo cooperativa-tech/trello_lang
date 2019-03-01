@@ -11,7 +11,7 @@ module TrelloLang
       @mem = Array.new(MEM_SIZE, 0)
       @call_stack = []
       @program = program
-      @ff = false
+      @ff = 0
     end
 
     def run
@@ -27,7 +27,7 @@ module TrelloLang
 
     def run_instruction(instruction)
       with_debug do
-        return noop_with_debug if ff && instruction != "]"
+        return noop_with_debug if ff > 0 && instruction != "]"
 
         y_lambda = {
           ">" => inc_dp,
@@ -53,7 +53,7 @@ module TrelloLang
     def opn_while
       -> do
         if mem[dp].zero?
-          @ff = true
+          @ff += 1
         elsif @call_stack.last != ip
           @call_stack.push(ip)
         end
@@ -62,12 +62,11 @@ module TrelloLang
 
     def cls_while
       -> do
-        if ff
-          @ff = false
-          @call_stack.pop
-          return
-        else
+        if ff.zero?
           @ip = call_stack.last - 1
+        else
+          @ff -= 1
+          @call_stack.pop
         end
       end
     end
@@ -85,11 +84,11 @@ module TrelloLang
     end
 
     def inc_dp
-      -> { @dp += 1 }
+      -> { @dp = [@dp + 1, MEM_SIZE - 1].min }
     end
 
     def dec_dp
-      -> { @dp -= 1 }
+      -> { @dp = [@dp - 1, 0].max }
     end
 
     def inc_byte
